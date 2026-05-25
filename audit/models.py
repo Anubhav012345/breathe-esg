@@ -1,0 +1,1 @@
+# Audit trail is embedded directly in EmissionRecord model

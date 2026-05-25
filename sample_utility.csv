@@ -1,0 +1,6 @@
+Meter_ID,Location,Billing_Period_Start,Billing_Period_End,Consumption,Unit,Tariff
+MTR-001,Mumbai HQ,01/01/2024,31/01/2024,45000,kWh,C1-Commercial
+MTR-002,Delhi Office,01/01/2024,31/01/2024,28000,kWh,C2-Industrial
+MTR-003,Bangalore Plant,01/01/2024,28/02/2024,82000,kWh,Industrial-HT
+MTR-001,Mumbai HQ,01/02/2024,29/02/2024,47500,kWh,C1-Commercial
+MTR-004,Chennai Warehouse,15/01/2024,14/02/2024,12,MWh,LT-Commercial
