@@ -19,13 +19,13 @@ A full-stack prototype for ingesting, normalizing, and reviewing corporate emiss
 - Password: `Test@1234`
 - Organisation: `Acme Corp`
 
-> ⚠️ Hosted on Render free tier — first request may take 50 seconds to wake up the server.
+> Free tier — first request may take 50 seconds to wake up.
 
 ---
 
 ## 📋 What It Does
 
-Enterprise clients generate emissions data from multiple disconnected sources — SAP exports, utility portal CSVs, and travel platform reports. This platform:
+Enterprise clients generate emissions data from multiple disconnected sources. This platform:
 
 1. **Ingests** data from all three source types via file upload
 2. **Normalizes** units, dates, and formats into a consistent schema
@@ -36,22 +36,23 @@ Enterprise clients generate emissions data from multiple disconnected sources �
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Project Structure
 
-breathe-esg/
-├── accounts/        # Auth + multi-tenancy (Organisation + User models)
-├── emissions/       # Core EmissionRecord model
-├── ingestion/       # File upload + parsers for each source type
-├── audit/           # Review workflow + dashboard stats API
-├── config/          # Django settings + URLs
-├── frontend/        # React app (Dashboard, Upload, Review pages)
-├── sample_sap.csv          # Sample SAP fuel data
-├── sample_utility.csv      # Sample electricity data
-├── sample_travel.csv       # Sample travel data
-├── MODEL.md         # Data model documentation
-├── DECISIONS.md     # Every design decision explained
-├── TRADEOFFS.md     # What was deliberately not built
-└── SOURCES.md       # Real-world research on each data source
+| Folder/File | Purpose |
+|-------------|---------|
+| `accounts/` | Auth + multi-tenancy (Organisation + User models) |
+| `emissions/` | Core EmissionRecord model |
+| `ingestion/` | File upload + parsers for each source type |
+| `audit/` | Review workflow + dashboard stats API |
+| `config/` | Django settings + URLs |
+| `frontend/` | React app (Dashboard, Upload, Review pages) |
+| `sample_sap.csv` | Sample SAP fuel data for testing |
+| `sample_utility.csv` | Sample electricity data for testing |
+| `sample_travel.csv` | Sample travel data for testing |
+| `MODEL.md` | Data model documentation |
+| `DECISIONS.md` | Every design decision explained |
+| `TRADEOFFS.md` | What was deliberately not built |
+| `SOURCES.md` | Real-world research on each data source |
 
 ---
 
@@ -72,87 +73,58 @@ breathe-esg/
 ### 3. ✈️ Corporate Travel — Flights, Hotels, Ground (Scope 3)
 - **Format**: CSV export from Concur/Navan expense platform
 - **Why not API**: Concur OAuth requires per-client setup. CSV export is universally available.
-- **Handles**: IATA airport codes with distance estimation via lookup table, hotel nights, ground transport km
-- **Emission factors**: ICAO flights: 0.255 kg/km, Hotel: 31 kg/night, Ground: 0.21 kg/km (DEFRA)
+- **Handles**: IATA airport codes with distance estimation, hotel nights, ground transport km
+- **Emission factors**: ICAO flights: 0.255 kg/km, Hotel: 31 kg/night, Ground: 0.21 kg/km
 
 ---
 
 ## 🗄️ Data Model Highlights
 
-```python
-class EmissionRecord(models.Model):
-    # Multi-tenancy
-    organisation         # FK to Organisation — all queries scoped per client
-
-    # Source tracking
-    source_type          # sap / utility / travel
-    source_file          # original filename
-    source_row           # row number in original file
-    ingested_by          # user who uploaded
-    ingested_at          # timestamp
-
-    # Scope classification
-    scope                # scope1 / scope2 / scope3
-    category             # diesel / electricity / flight / hotel / ground_transport
-
-    # Raw values — never overwritten
-    raw_quantity
-    raw_unit
-
-    # Normalized values
-    normalized_quantity
-    normalized_unit
-
-    # Emissions calculation
-    emission_factor
-    emission_factor_source   # DEFRA 2023 / CEA India / ICAO
-    co2e_kg
-
-    # Review workflow
-    status               # pending / flagged / approved / rejected
-    flag_reason
-    reviewed_by
-    reviewed_at
-
-    # Audit trail
-    is_edited
-    edit_note
-    locked_for_audit     # immutable once True
-
-    # Flexible metadata
-    metadata             # JSONField — SAP doc numbers, meter IDs, employee names
-```
+| Field | Purpose |
+|-------|---------|
+| `organisation` | FK — all queries scoped per client (multi-tenancy) |
+| `source_type` | sap / utility / travel |
+| `source_file` | Original filename uploaded |
+| `source_row` | Row number in original file |
+| `ingested_by` | User who uploaded |
+| `ingested_at` | Timestamp of ingestion |
+| `scope` | scope1 / scope2 / scope3 |
+| `category` | diesel / electricity / flight / hotel / ground_transport |
+| `raw_quantity` | Original value — never overwritten |
+| `raw_unit` | Original unit — never overwritten |
+| `normalized_quantity` | Converted value (litres / kWh / km) |
+| `emission_factor` | kg CO₂e per unit |
+| `emission_factor_source` | DEFRA 2023 / CEA India / ICAO |
+| `co2e_kg` | Final calculated emissions |
+| `status` | pending / flagged / approved / rejected |
+| `flag_reason` | Why it was auto-flagged |
+| `reviewed_by` | Analyst who reviewed |
+| `locked_for_audit` | Immutable once True |
+| `metadata` | JSONField — SAP doc numbers, meter IDs, employee names |
 
 ---
 
 ## ✅ Review Workflow
-Upload CSV/XLSX
-↓
-Parse & Normalize
-(handle messy real-world formats — German headers, mixed units, missing distances)
-↓
-Auto-flag suspicious rows
-(zero qty / negative values / high consumption / estimated distances)
-↓
-Analyst reviews in dashboard
-Approve ✅ / Reject ✗ / Flag 🚩 with note
-↓
-Lock approved records for audit
-(locked_for_audit = True → immutable via API)
+
+**Step 1** — Upload CSV/XLSX file
+
+**Step 2** — Parser normalizes messy real-world formats (German headers, mixed units, missing distances)
+
+**Step 3** — Suspicious rows are auto-flagged (zero qty, high values, estimated distances)
+
+**Step 4** — Analyst reviews each record: Approve ✅ / Reject ✗ / Flag 🚩 with note
+
+**Step 5** — Lock approved records for audit (locked_for_audit = True → immutable via API)
 
 ---
 
 ## 🧪 Sample Data Files
 
-Three sample CSV files included for testing:
-
 | File | Source | Rows | Notes |
 |------|--------|------|-------|
-| `sample_sap.csv` | SAP MB51 export | 5 | Diesel, petrol, natural gas — 3 plants, mixed units (L and gal) |
-| `sample_utility.csv` | Utility portal | 5 | Mixed kWh/MWh, non-calendar billing periods, 4 facilities |
+| `sample_sap.csv` | SAP MB51 export | 5 | Diesel, petrol, natural gas — 3 plants, mixed units |
+| `sample_utility.csv` | Utility portal | 5 | Mixed kWh/MWh, non-calendar billing periods |
 | `sample_travel.csv` | Concur/Navan | 6 | Flights with/without distance, hotels, ground transport |
-
-Upload all three from the **Upload Data** page to see the full pipeline in action.
 
 ---
 
@@ -160,36 +132,33 @@ Upload all three from the **Upload Data** page to see the full pipeline in actio
 
 | Not Built | Why | What It Would Take |
 |-----------|-----|--------------------|
-| Live SAP OData / Concur API pull | OAuth per client + Celery scheduler = 3x complexity for a prototype | Celery Beat + per-org credential vault + SAP RFC setup |
-| Configurable emission factors per org | DEFRA/CEA defaults cover the prototype. Real clients have PPAs and supplier-specific factors | EmissionFactor model with org+category+year composite key + admin UI |
-| PDF/Excel audit export | Time constraint — the data model fully supports it (locked_for_audit flag exists) | openpyxl or reportlab + export view (~4 hours of work) |
+| Live SAP OData / Concur API pull | OAuth per client + Celery scheduler = 3x complexity | Celery Beat + credential vault + SAP RFC setup |
+| Configurable emission factors per org | DEFRA/CEA defaults cover prototype | EmissionFactor model with org+category+year composite key |
+| PDF/Excel audit export | Time constraint — data model fully supports it | openpyxl or reportlab + export view (~4 hours) |
 
 ---
 
 ## 🚀 Running Locally
 
-### Backend
+**Backend**
+
 ```bash
 git clone https://github.com/Anubhav012345/breathe-esg.git
 cd breathe-esg
-
 python -m venv venv
-venv\Scripts\activate          # Windows
-source venv/bin/activate       # Mac/Linux
-
+venv\Scripts\activate
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
-# Backend runs at http://localhost:8000
 ```
 
-### Frontend
+**Frontend**
+
 ```bash
 cd frontend
 npm install
 npm start
-# Frontend runs at http://localhost:3000
 ```
 
 ---
@@ -204,7 +173,7 @@ npm start
 | Charts | Recharts |
 | Data Parsing | pandas, openpyxl |
 | Deployment | Render (backend Web Service + Static Site) |
-| Database | SQLite (dev) — PostgreSQL ready for production |
+| Database | SQLite (dev) — PostgreSQL ready |
 
 ---
 
@@ -212,10 +181,10 @@ npm start
 
 | File | Contents |
 |------|----------|
-| [`MODEL.md`](./MODEL.md) | Data model design, multi-tenancy, unit normalization, audit trail |
-| [`DECISIONS.md`](./DECISIONS.md) | Every ambiguity resolved + what I'd ask the PM |
-| [`TRADEOFFS.md`](./TRADEOFFS.md) | Three things deliberately not built and why |
-| [`SOURCES.md`](./SOURCES.md) | Real-world research on SAP, utility, and travel formats |
+| [MODEL.md](./MODEL.md) | Data model design, multi-tenancy, unit normalization, audit trail |
+| [DECISIONS.md](./DECISIONS.md) | Every ambiguity resolved + what I would ask the PM |
+| [TRADEOFFS.md](./TRADEOFFS.md) | Three things deliberately not built and why |
+| [SOURCES.md](./SOURCES.md) | Real-world research on SAP, utility, and travel formats |
 
 ---
 
@@ -223,16 +192,13 @@ npm start
 
 - **GitHub**: https://github.com/Anubhav012345/breathe-esg
 - **Frontend**: https://breathe-esg-frontend-anubhav.onrender.com
-- **Backend**: https://breathe-esg-backend-anubhav.onrender.com
+- **Backend**: https://breathe-esg-backend-anubhav.onrender.com/api
 
-Shared with:
-- saurav@breatheesg.com
-- rahul@breatheesg.com  
-- shivang@breatheesg.com
+Shared with saurav@breatheesg.com · rahul@breatheesg.com · shivang@breatheesg.com
 
 ---
 
 ## 👤 Author
 
-**Anubhav Srivastava**  
+**Anubhav Srivastava**
 GitHub: [@Anubhav012345](https://github.com/Anubhav012345)
